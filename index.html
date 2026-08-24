@@ -1016,8 +1016,13 @@ function setQuery(v){
 
 /* URL pública compartible/indexable (la que va en WhatsApp, QR y OG).
    En la demo navegamos por #t=slug, pero compartimos la URL de producción. */
-const BASE_PUBLICA = "https://mejoraregulatoria.municipiodeoaxaca.gob.mx/tramite/";
-function urlPublica(t){ return BASE_PUBLICA + t.slug; }
+function urlPublica(t){
+  // Base dinámica: origen + ruta reales de donde está alojado el sitio en este
+  // momento, así el enlace copiado, el QR y el botón de WhatsApp siempre apuntan
+  // al servidor real (pruebas, producción, subcarpeta, etc.) y no a un dominio fijo.
+  const base = location.origin + location.pathname; // ej. https://dominio.gob.mx/index.html
+  return base + "#t=" + encodeURIComponent(t.slug);
+}
 
 /* Convierte texto corrido en lista: acepta "1.", "1.-", "1)" y, si no hay numeración, respeta los saltos de línea */
 function fmtNumerada(txt){
