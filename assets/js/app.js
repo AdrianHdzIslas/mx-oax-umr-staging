@@ -875,7 +875,6 @@ function renderInspeccion(x){
     ${acc2('Categoría', `<p>${escapeHtml(x.categoria||'—')}</p>`, true)}
     ${acc2('Objetivo', `<p>${escapeHtml(x.objetivo||'No especificado en la ficha.')}</p>`, true)}
     ${acc2('Área responsable', `<p>${escapeHtml(x.area||'—')}</p>`, false)}
-    ${x.ficha?`<div class="callout info" style="margin-top:12px">📄 Ficha de referencia: <strong>${escapeHtml(x.ficha)}</strong> — en producción enlaza al PDF de la ficha.</div>`:''}
     <div class="det-volver"><button class="btn-reset" style="width:auto;padding:10px 20px" onclick="location.hash='inspecciones'">← Volver a inspecciones</button></div>
   </div>`;
   document.title=x.nombre+' · Inspecciones UMR';
