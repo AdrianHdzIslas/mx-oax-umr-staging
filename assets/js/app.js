@@ -28,18 +28,20 @@ function expandir(qn){
    Pre-construimos un blob normalizado por trámite con pesos.
    ============================================================ */
 let DATA = [];
+function indexarTramite(t, enLinea){
+  return {
+    ref: t,
+    n_nombre: norm((t.nombre_display||t.nombre) + " " + t.nombre),
+    n_dep: norm(t.dependencia),
+    n_cat: norm((t.categoria||"") + " " + (t.categoria_ciudadana||"")),
+    n_obj: norm((t.objetivo||"") + " " + (t.casos||"") + " " + (t.resultado||"")),
+    n_tags: norm((t.etiquetas||[]).join(" ")),
+    n_clave: norm(t.clave)
+  };
+}
 function construirIndice(){
-  DATA = window.TRAMITES.map(t=>{
-    return {
-      ref:t,
-      n_nombre: norm(t.nombre_display + " " + t.nombre),
-      n_dep: norm(t.dependencia),
-      n_cat: norm(t.categoria + " " + t.categoria_ciudadana),
-      n_obj: norm(t.objetivo + " " + t.casos + " " + t.resultado),
-      n_tags: norm((t.etiquetas||[]).join(" ")),
-      n_clave: norm(t.clave)
-    };
-  });
+  DATA = window.TRAMITES.map(t=>indexarTramite(t,false))
+    .concat((window.TRAMITES_EN_LINEA||[]).map(t=>indexarTramite(t,true)));
 }
 
 /* Puntúa un trámite contra los términos de búsqueda */
@@ -67,11 +69,13 @@ function puntuar(item, terms, extras){
 /* ============================================================
    ESTADO DE FILTROS
    ============================================================ */
-const estado = {q:"", dep:"", tipo:"", costo:"", tiempo:"", catCiud:""};
+const estado = {q:"", dep:"", tipo:"", costo:"", tiempo:"", catCiud:"", modalidad:""};
 
 function pasaFiltros(t){
   if(estado.dep && t.ref.dependencia!==estado.dep) return false;
-  if(estado.tipo && t.ref.tipo!==estado.tipo) return false;
+  if(estado.tipo && (t.ref.tipo||"Trámite")!==estado.tipo) return false;
+  if(estado.modalidad==="en_linea" && !t.ref.en_linea) return false;
+  if(estado.modalidad==="presencial" && t.ref.en_linea) return false;
   if(estado.catCiud && t.ref.categoria_ciudadana_id!==estado.catCiud) return false;
   // Costo
   if(estado.costo){
@@ -138,6 +142,8 @@ function escapeHtml(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&l
 const iconClock='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 const iconCoin='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2 0 0 1 5 0c0 2.5-5 1.5-5 4a2.5 2 0 0 0 5 0"/></svg>';
 const iconBldg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg>';
+const iconExternal='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>';
+const iconInfo='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>';
 
 function render(items, terms){
   const lista=document.getElementById('lista');
@@ -150,6 +156,22 @@ function render(items, terms){
 
   lista.innerHTML = items.slice(0,80).map(it=>{
     const t=it.ref;
+    if(t.en_linea){
+      return `<article class="card card-en-linea" onclick="abrirTramiteEnLinea('${t.url_inicio}')">
+      <div class="card-top">
+        <div>
+          <h3>${resaltar(t.nombre_display,terms)}</h3>
+          <div class="dep">${iconBldg} ${escapeHtml(t.dependencia)}</div>
+        </div>
+        <span class="badge en-linea">EN LÍNEA ${iconExternal}</span>
+      </div>
+      <div class="meta">
+        <span class="m">${iconCoin} <b>${escapeHtml(t.costo)}</b></span>
+        ${t.clave?`<span class="m clave">${escapeHtml(t.clave)}</span>`:""}
+      </div>
+      <div class="nota-en-linea">${iconInfo} Se inicia en el portal municipal, en una pestaña nueva</div>
+    </article>`;
+    }
     const badgeClass = t.tipo==="Trámite"?"tramite":(t.tipo==="Servicio"?"servicio":"formato");
     const tagsMatch = (t.etiquetas||[]).slice(0,5).map(tg=>{
       const m = terms.some(w=>w.length>2 && norm(tg).includes(w));
@@ -172,6 +194,10 @@ function render(items, terms){
   }).join("");
 }
 
+function abrirTramiteEnLinea(url){
+  window.open(url,'_blank','noopener');
+}
+
 function renderVacio(){
   // Sugerencias: trámites más cercanos ignorando el filtro de costo/tiempo
   const qn=norm(estado.q);
@@ -182,7 +208,11 @@ function renderVacio(){
   let sugHtml="";
   if(cercanos.length){
     sugHtml = `<p>¿Buscabas alguno de estos?</p><div class="sugerencias">` +
-      cercanos.map(r=>`<div class="sug-link" onclick="abrirTramite('${r.it.ref.slug}')">${escapeHtml(r.it.ref.nombre_display)} <span style="color:var(--texto-sec);font-weight:400">· ${escapeHtml(r.it.ref.dependencia)}</span></div>`).join("") +
+      cercanos.map(r=>{
+        const t=r.it.ref;
+        if(t.en_linea) return `<div class="sug-link" onclick="abrirTramiteEnLinea('${t.url_inicio}')">${escapeHtml(t.nombre)} <span style="color:var(--texto-sec);font-weight:400">· ${escapeHtml(t.dependencia)}</span></div>`;
+        return `<div class="sug-link" onclick="abrirTramite('${t.slug}')">${escapeHtml(t.nombre_display)} <span style="color:var(--texto-sec);font-weight:400">· ${escapeHtml(t.dependencia)}</span></div>`;
+      }).join("") +
       `</div>`;
   }else{
     sugHtml = `<div class="sugerencias">
@@ -199,6 +229,7 @@ function renderVacio(){
 /* Chips de filtros activos */
 function renderChips(){
   const map={dep:estado.dep,tipo:estado.tipo,
+    modalidad:{en_linea:"En línea",presencial:"En ventanilla"}[estado.modalidad],
     costo:{gratuito:"Gratuito",hasta5:"Hasta 5 UMA",mas5:"Más de 5 UMA"}[estado.costo],
     tiempo:{inmediato:"Inmediato",hasta5:"Hasta 5 días",mas5:"Más de 5 días"}[estado.tiempo],
     catCiud: estado.catCiud ? (CATS.find(c=>c.id===estado.catCiud)||{}).label : ""};
@@ -212,6 +243,7 @@ function quitarFiltro(k){
   estado[k]="";
   if(k==="dep") document.getElementById('f-dep').value="";
   if(k==="tipo") document.querySelector('input[name=tipo][value=""]').checked=true;
+  if(k==="modalidad") document.querySelector('input[name=modalidad][value=""]').checked=true;
   if(k==="costo") document.querySelector('input[name=costo][value=""]').checked=true;
   if(k==="tiempo") document.querySelector('input[name=tiempo][value=""]').checked=true;
   if(k==="catCiud") renderCats();
@@ -241,7 +273,7 @@ function construirCats(){
 
 /* Estado "home": sin texto y sin filtros activos */
 function esHome(){
-  return !estado.q.trim() && !estado.dep && !estado.tipo && !estado.costo && !estado.tiempo && !estado.catCiud;
+  return !estado.q.trim() && !estado.dep && !estado.tipo && !estado.costo && !estado.tiempo && !estado.catCiud && !estado.modalidad;
 }
 /* Grid de categorías ciudadanas como puerta de entrada */
 function renderHomeGrid(){
@@ -423,11 +455,7 @@ function renderDetalle(t){
   const compartir = sensible
     ? `<div class="aviso-sensible">🔒 Este registro contiene datos sensibles. No se genera URL pública, QR ni vista para compartir.</div>`
     : `<div class="compartir">
-        <a class="btn-share wa" href="https://wa.me/?text=${encodeURIComponent(t.nombre_display+' — '+urlPublica(t))}" target="_blank" rel="noopener">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.1 14.9l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 0 1 12 4zm-2.7 4c-.2 0-.5 0-.7.4-.2.4-.9.9-.9 2.2s.9 2.5 1 2.7c.2.2 1.8 3 4.5 4 .6.2 1.1.4 1.5.2.5-.1 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1l-.7-.3s-1.1-.6-1.3-.6c-.2 0-.3-.1-.5.1l-.6.8c-.1.1-.2.2-.4.1-.2-.1-.9-.4-1.7-1-.6-.5-1-1.2-1.2-1.4-.1-.2 0-.3.1-.4l.3-.4.2-.3v-.4l-.7-1.6c-.1-.3-.3-.3-.4-.3z"/></svg>
-          WhatsApp
-        </a>
-        <button class="btn-share" onclick="copiarEnlace('${escapeHtml(urlPublica(t))}')">
+        <button class="btn-share primario" onclick="copiarEnlace('${escapeHtml(urlPublica(t))}')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
           Copiar enlace
         </button>
@@ -507,7 +535,7 @@ function syncRadio(name,val){const r=document.querySelector('input[name='+name+'
 function abrirBusqueda(){
   const q=document.getElementById('q'); if(q){q.value=estado.q;document.getElementById('clear').style.display=estado.q?'flex':'none';}
   const fd=document.getElementById('f-dep'); if(fd)fd.value=estado.dep||'';
-  syncRadio('tipo',estado.tipo);syncRadio('costo',estado.costo);syncRadio('tiempo',estado.tiempo);
+  syncRadio('tipo',estado.tipo);syncRadio('costo',estado.costo);syncRadio('tiempo',estado.tiempo);syncRadio('modalidad',estado.modalidad);
   renderCats(); buscar();
 }
 
@@ -972,6 +1000,7 @@ function poblarDependencias(){
   const sel=document.getElementById('f-dep');
   const counts={};
   window.TRAMITES.forEach(t=>counts[t.dependencia]=(counts[t.dependencia]||0)+1);
+  (window.TRAMITES_EN_LINEA||[]).forEach(t=>counts[t.dependencia]=(counts[t.dependencia]||0)+1);
   Object.entries(counts).sort((a,b)=>b[1]-a[1]).forEach(([dep,n])=>{
     const o=document.createElement('option');o.value=dep;o.textContent=`${dep} (${n})`;sel.appendChild(o);
   });
@@ -1011,10 +1040,11 @@ function init(){
 
   document.getElementById('f-dep').addEventListener('change',e=>{estado.dep=e.target.value;buscar();});
   document.querySelectorAll('input[name=tipo]').forEach(r=>r.addEventListener('change',e=>{estado.tipo=e.target.value;buscar();}));
+  document.querySelectorAll('input[name=modalidad]').forEach(r=>r.addEventListener('change',e=>{estado.modalidad=e.target.value;buscar();}));
   document.querySelectorAll('input[name=costo]').forEach(r=>r.addEventListener('change',e=>{estado.costo=e.target.value;buscar();}));
   document.querySelectorAll('input[name=tiempo]').forEach(r=>r.addEventListener('change',e=>{estado.tiempo=e.target.value;buscar();}));
   document.getElementById('reset').addEventListener('click',()=>{
-    estado.dep=estado.tipo=estado.costo=estado.tiempo=estado.catCiud="";
+    estado.dep=estado.tipo=estado.costo=estado.tiempo=estado.catCiud=estado.modalidad="";
     document.getElementById('f-dep').value="";
     document.querySelectorAll('.radio-list input[value=""]').forEach(r=>r.checked=true);
     renderCats();buscar();
